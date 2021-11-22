@@ -4,7 +4,8 @@ import sys
 import time
 import logging
 
-_, term_width = os.popen('stty size', 'r').read().split()
+# _, term_width = os.popen('stty size', 'r').read().split()
+term_width = 80
 term_width = int(term_width)
 
 TOTAL_BAR_LENGTH = 40.
@@ -99,6 +100,7 @@ def init_log(output_dir):
     console.setLevel(logging.INFO)
     logging.getLogger('').addHandler(console)
     return logging
+
 
 if __name__ == '__main__':
     pass

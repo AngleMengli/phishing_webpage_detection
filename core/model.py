@@ -8,6 +8,7 @@ from core.anchors import generate_default_anchor_maps, hard_nms
 from config import CAT_NUM, PROPOSAL_NUM
 
 
+
 class ProposalNet(nn.Module):
     def __init__(self):
         super(ProposalNet, self).__init__()
@@ -55,7 +56,7 @@ class attention_net(nn.Module):
             for x in rpn_score.data.cpu().numpy()]
         top_n_cdds = [hard_nms(x, topn=self.topN, iou_thresh=0.25) for x in all_cdds]
         top_n_cdds = np.array(top_n_cdds)
-        top_n_index = top_n_cdds[:, :, -1].astype(np.int)
+        top_n_index = top_n_cdds[:, :, -1].astype(np.int64)
         top_n_index = torch.from_numpy(top_n_index).cuda()
         top_n_prob = torch.gather(rpn_score, dim=1, index=top_n_index)
         part_imgs = torch.zeros([batch, self.topN, 3, 224, 224]).cuda()
@@ -78,6 +79,30 @@ class attention_net(nn.Module):
         return [raw_logits, concat_logits, part_logits, top_n_index, top_n_prob]
 
 
+class VisualNet(nn.Module):
+
+    def __init__(self, new_conv: [], include_top=False):
+        self.base = vgg16(pretrained=True)
+        if not include_top:
+            self.base = nn.Sequential(*list(*self.base.children())[:-1])
+        self.conv2d = nn.Conv2d(in_channels=3, out_channels=new_conv[-1], kernel_size=(new_conv[0], new_conv[1]))
+        self.glob_aver_2d = nn.AdaptiveMaxPool2d(1)
+
+    def forward(self, anchor_input, positive_input, negative_input):
+        encode_a = self.base(anchor_input)
+        encoded_p = self.base(positive_input)
+        encode_n = self.base(negative_input)
+        square_diff_pos = torch.square(encode_a - encoded_p)
+        square_diff_neg = torch.square(encode_a - encode_n)
+
+        square_diff_pos_l2 = torch.mean(square_diff_pos, dim=1)
+        square_diff_neg_l2 = torch.mean(square_diff_neg, dim=1)
+
+        diff = torch.subtract(square_diff_pos_l2, square_diff_neg_l2)
+        diff.view((1,))
+        return diff
+
+
 def list_loss(logits, targets):
     temp = F.log_softmax(logits, -1)
     loss = [-temp[i][targets[i].item()] for i in range(logits.size(0))]
@@ -94,3 +119,5 @@ def ranking_loss(score, targets, proposal_num=PROPOSAL_NUM):
         loss_p = torch.sum(F.relu(loss_p))
         loss += loss_p
     return loss / batch_size
+
+
