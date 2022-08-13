@@ -62,6 +62,12 @@ def generate_default_anchor_maps(anchors_setting=None, input_shape=INPUT_SIZE):
 
 
 def hard_nms(cdds, topn=10, iou_thresh=0.25):
+    """
+    @param cdds 全部的anchor
+    @param topn 前N个
+    @param iou_thresh 设定的阈值
+    return
+    """
     if not (type(cdds).__module__ == 'numpy' and len(cdds.shape) == 2 and cdds.shape[1] >= 5):
         raise TypeError('edge_box_map should be N * 5+ ndarray')
 
@@ -96,5 +102,5 @@ if __name__ == '__main__':
         [0.4, 1, 10, 12, 20],
         [0.5, 1, 11, 11, 20],
         [0.55, 20, 30, 40, 50]
-    ]), topn=100, iou_thresh=0.4)
+    ]), topn=1, iou_thresh=0.4)
     print(a)

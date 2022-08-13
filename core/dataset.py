@@ -1,12 +1,16 @@
 import numpy as np
 import scipy.misc
 import os
+
+import torch
 from PIL import Image
 from torchvision import transforms
 from config import INPUT_SIZE
 from torch.utils.data import Dataset
 from sklearn.model_selection import train_test_split
 import cv2
+from collections import Counter
+
 
 class CUB():
     def __init__(self, root, is_train=True, data_len=None):
@@ -121,9 +125,69 @@ class Phish(Dataset):
             return len(self.test_label)
 
 
+class newly_crawled_phishing(Dataset):
+    def __init__(self, img_path, label_path, transform = None, target_transform = None):
+
+        #get_image_path:获取每个图片路径，保存在image_paths
+        image_paths = []
+        if os.path.isdir(img_path):
+            images = os.listdir(img_path)
+            image_paths = [os.path.join(img_path, image) for image in images]
+
+
+
+
+        # #读取保存在label.txt文件中的标签，保存在label中
+        labels = []
+        with open(label_path, "r") as f:
+            #统计标签种类个数
+            label_txt = f.readlines()
+            # label_count = len(Counter(label_txt))
+            for label in label_txt:
+                label = label.strip('\n')  # 去掉列表中每一个元素的换行符
+                labels.append(label)
+
+
+
+        #将label种类和编号保存在字典中，一一对应
+        label_dic = {}
+        label_uni = list(set(labels))
+        for i in range(len(label_uni)):
+            label_dic[label_uni[i]] = i
+
+        #将label列表中的字符串转化为数字
+        label_num = []
+        for label in labels:
+            la_num = label_dic[label]
+            label_num.append(la_num)
+
+
+        #将两个列表中的元素一一对应
+        img_label = list(zip(image_paths,label_num))
+
+        self.img_label = img_label
+        self.transform = transform
+        self.target_transform = target_transform
+
+    def __getitem__(self, item):
+        img, label = self.img_label[item]
+        img = Image.open(img).convert('RGB')
+        if self.transform is not None:
+            img = self.transform(img)
+        return img,label
+
+    def __len__(self):
+        return len(self.img_label)
+
+
+def my_collate(batch):
+    data = [item[0] for item in batch]
+    target = [item[1] for item in batch]
+    target = torch.LongTensor(target)
+    return [data, target]
 
 if __name__ == '__main__':
-    pass
+    # pass
     # dataset = CUB(root='./CUB_200_2011')
     # print(len(dataset.train_img))
     # print(len(dataset.train_label))
@@ -134,3 +198,8 @@ if __name__ == '__main__':
     # print(len(dataset.test_label))
     # for data in dataset:
     #     print(data[0].size(), data[1])
+    dataset = newly_crawled_phishing("I://wei//NTS-Net//dataset_nts_net//newly_crawled_phishing",
+                                     "I://wei//NTS-Net//dataset_nts_net//labels.txt")
+    print(dataset.__len__())
+    for i in range(dataset.__len__()):
+        print(dataset.__getitem__(i))

@@ -2,11 +2,12 @@ from torch import nn
 import torch
 import torch.nn.functional as F
 from torch.autograd import Variable
+from torchvision.models import vgg16
+
 from core import resnet
 import numpy as np
 from core.anchors import generate_default_anchor_maps, hard_nms
 from config import CAT_NUM, PROPOSAL_NUM
-
 
 
 class ProposalNet(nn.Module):
@@ -32,37 +33,49 @@ class ProposalNet(nn.Module):
 
 
 class attention_net(nn.Module):
+    """
+    [raw_logits, concat_logits, part_logits, top_n_index, top_n_prob, part_imgs_points]
+    """
+
     def __init__(self, topN=4):
         super(attention_net, self).__init__()
+        web_num = 155
         self.pretrained_model = resnet.resnet50(pretrained=True)
         self.pretrained_model.avgpool = nn.AdaptiveAvgPool2d(1)
-        self.pretrained_model.fc = nn.Linear(512 * 4, 200)
+        self.pretrained_model.fc = nn.Linear(512 * 4, web_num)
         self.proposal_net = ProposalNet()
         self.topN = topN
-        self.concat_net = nn.Linear(2048 * (CAT_NUM + 1), 200)
-        self.partcls_net = nn.Linear(512 * 4, 200)
+        self.concat_net = nn.Linear(2048 * (CAT_NUM + 1), web_num)
+        self.partcls_net = nn.Linear(512 * 4, web_num)
         _, edge_anchors, _ = generate_default_anchor_maps()
         self.pad_side = 224
         self.edge_anchors = (edge_anchors + 224).astype(np.int)
 
     def forward(self, x):
+        # 先用预训练模型抽取出特征
         resnet_out, rpn_feature, feature = self.pretrained_model(x)
+        # 填充原始图片
         x_pad = F.pad(x, (self.pad_side, self.pad_side, self.pad_side, self.pad_side), mode='constant', value=0)
         batch = x.size(0)
         # we will reshape rpn to shape: batch * nb_anchor
         rpn_score = self.proposal_net(rpn_feature.detach())
+        # 全部的边anchor
         all_cdds = [
             np.concatenate((x.reshape(-1, 1), self.edge_anchors.copy(), np.arange(0, len(x)).reshape(-1, 1)), axis=1)
             for x in rpn_score.data.cpu().numpy()]
+        # 从全部anchor中找出topN的anchor，iou阈值为0.25
         top_n_cdds = [hard_nms(x, topn=self.topN, iou_thresh=0.25) for x in all_cdds]
         top_n_cdds = np.array(top_n_cdds)
         top_n_index = top_n_cdds[:, :, -1].astype(np.int64)
         top_n_index = torch.from_numpy(top_n_index).cuda()
         top_n_prob = torch.gather(rpn_score, dim=1, index=top_n_index)
         part_imgs = torch.zeros([batch, self.topN, 3, 224, 224]).cuda()
+        part_imgs_points = []
         for i in range(batch):
             for j in range(self.topN):
                 [y0, x0, y1, x1] = top_n_cdds[i][j, 1:5].astype(np.int)
+                part_imgs_points.append([y0, x0, y1, x1])
+
                 part_imgs[i:i + 1, j] = F.interpolate(x_pad[i:i + 1, :, y0:y1, x0:x1], size=(224, 224), mode='bilinear',
                                                       align_corners=True)
         part_imgs = part_imgs.view(batch * self.topN, 3, 224, 224)
@@ -76,6 +89,7 @@ class attention_net(nn.Module):
         raw_logits = resnet_out
         # part_logits have the shape: B*N*200
         part_logits = self.partcls_net(part_features).view(batch, self.topN, -1)
+        # return [raw_logits, concat_logits, part_logits, top_n_index, top_n_prob, part_imgs_points]
         return [raw_logits, concat_logits, part_logits, top_n_index, top_n_prob]
 
 
@@ -119,5 +133,3 @@ def ranking_loss(score, targets, proposal_num=PROPOSAL_NUM):
         loss_p = torch.sum(F.relu(loss_p))
         loss += loss_p
     return loss / batch_size
-
-
