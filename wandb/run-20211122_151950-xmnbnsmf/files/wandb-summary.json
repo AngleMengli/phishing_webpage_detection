@@ -1,1 +1,0 @@
-{"epoch": 2, "train_loss": 1.7681551248207688, "train_acc": 0.6179310344827587, "total": 1450, "_runtime": 484, "_timestamp": 1637566074, "_step": 2, "test_loss": 3.0003320292768807, "test_acc": 0.3489655172413793, "total sample": 1450}
