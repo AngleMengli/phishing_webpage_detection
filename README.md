@@ -11,5 +11,5 @@ The dataset is from the paper "VisualPhishNet: Zero-Day Phishing Website Detecti
 # Train the model
 If you want to train the NTS-Net, just run `python train.py`. You may need to change the configurations in `config.py`. The parameter `PROPOSAL_NUM` is `p` in the original paper and the parameter `CAT_NUM` is `k` in the original paper. During training, the log file and checkpoint file will be saved in `save_dir` directory. You can change the parameter `resume` to choose the checkpoint model to resume.
 # Usage
-The core file of the model is [core/model.py]()
+The core file of the model is [core/model.py](https://github.com/AngleMengli/phishing_webpage_detection/blob/master/core/model.py)
 
